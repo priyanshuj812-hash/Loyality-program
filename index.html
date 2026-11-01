@@ -15,6 +15,7 @@ input,button{font:inherit;width:100%;padding:12px;border-radius:10px;border:1px 
 button{background:var(--ac);color:#fff;border:0;font-weight:600;cursor:pointer}
 button.alt{background:transparent;color:var(--ac);border:1px solid var(--ac)}
 label{font-size:13px;color:var(--mut);display:block;margin:4px 0}
+.row{display:flex;gap:12px;align-items:flex-end}
 .big{font-size:44px;font-weight:700;color:var(--ac);line-height:1.1;margin-top:6px}
 .big small{font-size:16px;color:var(--mut);font-weight:400}
 .bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:10px 0}
@@ -22,6 +23,7 @@ label{font-size:13px;color:var(--mut);display:block;margin:4px 0}
 .msg{min-height:20px;font-size:14px;color:var(--mut)}
 .msg.err{color:var(--ac)}
 .small{font-size:12px;color:var(--mut);margin-top:6px}
+.gift{font-weight:600;margin:6px 0}
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
 .btn{display:block;text-align:center;padding:12px;border-radius:10px;background:#25D366;color:#fff;font-weight:600;text-decoration:none;margin-top:8px}
@@ -51,10 +53,16 @@ td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
 
   <div id="ccard" class="card hide">
     <div id="cname" style="font-weight:600"></div>
-    <div class="big"><span id="cpts">0</span> <small>points</small></div>
+    <div class="row">
+      <div class="big"><span id="cpts">0</span> <small>points</small></div>
+      <div class="big"><span id="cvis">0/5</span> <small>kharid</small></div>
+    </div>
     <div class="bar"><i id="cbar"></i></div>
+    <div id="cgift" class="gift"></div>
     <div id="cinfo" class="msg"></div>
-    <button class="alt" onclick="resetPhone()">Dusra number</button>
+    <div id="cvalid" class="small"></div>
+    <div id="ctiers" class="small"></div>
+    <button class="alt" style="margin-top:10px" onclick="resetPhone()">Dusra number</button>
   </div>
 </div>
 
@@ -67,7 +75,7 @@ td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
     <input id="opts" type="number" inputmode="numeric" min="1" placeholder="Kitne points?">
     <input id="onote" placeholder="Kya liya / note (zaroori nahi)" maxlength="40">
     <button onclick="act('add')">+ Points do</button>
-    <button class="alt" onclick="act('use')">Points use karo (kaato)</button>
+    <button class="alt" onclick="act('claim')">Reward claim karo</button>
     <button class="alt" onclick="list()">Saare customers</button>
     <div id="omsg" class="msg"></div>
     <a id="wa" class="btn hide" target="_blank" rel="noopener">WhatsApp par message bhejo</a>
@@ -79,7 +87,7 @@ td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
 <script>
 const SHOP = 'Khushi Store';
 const PLACE = 'Biru, Simdega';
-const API = 'https://script.google.com/macros/s/AKfycbz500i7vD9Mo1odGghsTES7uLqEHVMHuENz_67907b_Wh5xPadS-IvPGDeMeRuXtYE/exec';
+const API = 'https://script.google.com/macros/s/AKfycbwp8oeKsbLE5Mou50F2MTRAneG-VDiyao0ozB3M_ufcnU3W2FTSjvDW_eWNbyGgTpps/exec';
 const isOwner = new URLSearchParams(location.search).has('owner');
 const $ = id => document.getElementById(id);
 
@@ -87,9 +95,11 @@ async function call(params){
   const r = await fetch(API + '?' + new URLSearchParams(params));
   return r.json();
 }
-function setBar(el, pts, goal){ el.style.width = Math.min(100, Math.round(pts / goal * 100)) + '%'; }
+function setBar(el, pts, top){ el.style.width = Math.min(100, Math.round(pts / top * 100)) + '%'; }
 function say(el, t, err){ el.textContent = t; el.className = 'msg' + (err ? ' err' : ''); }
 function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmt(ds){ const a = ds.split('-'); return a[2] + '-' + a[1] + '-' + a[0]; }
+const topPts = d => d.tiers[d.tiers.length - 1][0];
 
 async function check(){
   say($('cmsg'), 'Dekh rahe hain...');
@@ -102,10 +112,20 @@ async function check(){
     $('reg').classList.toggle('hide', !!d.name);
     $('cname').textContent = d.name ? 'Namaste, ' + d.name : 'Aapka card';
     $('cpts').textContent = d.points;
-    setBar($('cbar'), d.points, d.goal);
-    $('cinfo').textContent = d.points < d.goal
-      ? d.goal - d.points + ' aur points par ' + d.reward + '.'
-      : 'Badhai! ' + d.reward + ' ke liye points poore ho gaye. Dukan par dikhao.';
+    $('cvis').textContent = d.visits + '/' + d.minVisits;
+    setBar($('cbar'), d.points, topPts(d));
+    const first = d.tiers[0];
+    const L = [];
+    if(d.eligible) L.push('Badhai! Dukan par dikhao aur ' + d.gift + ' lo.');
+    else {
+      if(d.points < first[0]) L.push(first[0] - d.points + ' aur points par ' + first[1] + ' milega.');
+      if(d.visits < d.minVisits) L.push('Reward ke liye ' + (d.minVisits - d.visits) + ' aur kharid chahiye.');
+    }
+    if(d.next && d.points >= first[0]) L.push('Aur ' + (d.next[0] - d.points) + ' points par ' + d.next[1] + ' milega.');
+    $('cgift').textContent = d.gift ? 'Abhi ka gift: ' + d.gift : '';
+    $('cinfo').textContent = L.join(' ');
+    $('cvalid').textContent = d.validTill ? 'Card ' + fmt(d.validTill) + ' tak valid hai.' : 'Pehli kharid se 3 mahine tak valid.';
+    $('ctiers').textContent = 'Gifts: ' + d.tiers.map(t => t[0] + ' points: ' + t[1]).join(' | ');
   }catch(e){ say($('cmsg'), 'Connection error', true); }
 }
 
@@ -132,18 +152,29 @@ async function act(action){
   say($('omsg'), 'Ruko...');
   $('wa').classList.add('hide');
   try{
-    const d = await call({action, phone:$('op').value, name:$('on').value, pts:$('opts').value, note:$('onote').value, pin:$('pin').value});
-    localStorage.setItem('pin', $('pin').value);
-    if(d.error){ say($('omsg'), d.error, true); if(d.points != null) setBar($('obar'), d.points, d.goal); return; }
-    setBar($('obar'), d.points, d.goal);
-    say($('omsg'), (d.name || d.phone) + ': ' + d.points + ' points abhi hain (kul use hue: ' + d.used + ')');
     const pts = $('opts').value;
-    let msg = 'Namaste ' + (d.name ? d.name + ' ji' : 'ji') + ', ' + SHOP + ' (' + PLACE + ') me ';
-    msg += action === 'add' ? 'aapke ' + pts + ' points jude.' : 'aapne ' + pts + ' points use kiye.';
-    msg += ' Ab aapke ' + d.points + ' points hain. ';
-    msg += d.points >= d.goal ? d.reward + ' claim karne ke liye dukan par aayein!' : (d.goal - d.points) + ' aur points par ' + d.reward + ' milega!';
-    msg += ' Apna card dekhein: ' + location.origin + location.pathname;
-    $('wa').href = 'https://wa.me/91' + d.phone + '?text=' + encodeURIComponent(msg);
+    const d = await call({action, phone:$('op').value, name:$('on').value, pts:pts, note:$('onote').value, pin:$('pin').value});
+    localStorage.setItem('pin', $('pin').value);
+    if(d.error){ say($('omsg'), d.error, true); if(d.points != null) setBar($('obar'), d.points, topPts(d)); return; }
+    setBar($('obar'), d.points, topPts(d));
+    const nm = d.name ? d.name + ' ji' : 'ji';
+    const link = location.origin + location.pathname;
+    let m = 'Namaste ' + nm + ', ';
+    if(action === 'claim'){
+      say($('omsg'), 'Reward do: ' + d.gift + ' (' + d.usedPoints + ' points kate). Card reset ho gaya.');
+      m += 'badhai! Aapko ' + SHOP + ' (' + PLACE + ') se ' + d.gift + ' mil gaya. Dhanyawad! Naya card agli kharid se shuru hoga. ' + link;
+    } else {
+      say($('omsg'), (d.name || d.phone) + ': ' + d.points + ' points, ' + d.visits + '/' + d.minVisits + ' kharid.' + (d.eligible ? ' Reward ke liye eligible: ' + d.gift : ''));
+      m += SHOP + ' (' + PLACE + ') me aapke ' + pts + ' points jude. Ab aapke ' + d.points + ' points aur ' + d.visits + '/' + d.minVisits + ' kharid hain.';
+      if(d.eligible) m += ' Aap ' + d.gift + ' ke liye eligible hain, dukan par aakar lein!';
+      else {
+        if(d.points < d.tiers[0][0]) m += ' ' + (d.tiers[0][0] - d.points) + ' aur points par ' + d.tiers[0][1] + ' milega.';
+        if(d.visits < d.minVisits) m += ' Iske liye ' + (d.minVisits - d.visits) + ' aur kharid chahiye.';
+      }
+      if(d.validTill) m += ' Card ' + fmt(d.validTill) + ' tak valid hai.';
+      m += ' Apna card dekhein: ' + link;
+    }
+    $('wa').href = 'https://wa.me/91' + d.phone + '?text=' + encodeURIComponent(m);
     $('wa').classList.remove('hide');
     $('opts').value = ''; $('onote').value = '';
   }catch(e){ say($('omsg'), 'Connection error', true); }
@@ -153,8 +184,8 @@ async function list(){
   try{
     const d = await call({action:'list', pin:$('pin').value});
     if(d.error){ say($('omsg'), d.error, true); return; }
-    let h = '<table><tr><th>Naam</th><th>Number</th><th>Points</th><th>Use hue</th><th>Janmdin</th></tr>';
-    d.rows.forEach(r => { h += '<tr><td>' + esc(r[1]) + '</td><td>' + esc(r[0]) + '</td><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td><td>' + esc(r[5] || '') + '</td></tr>'; });
+    let h = '<table><tr><th>Naam</th><th>Number</th><th>Points</th><th>Kharid</th><th>Claim</th><th>Janmdin</th></tr>';
+    d.rows.forEach(r => { h += '<tr><td>' + esc(r[1]) + '</td><td>' + esc(r[0]) + '</td><td>' + esc(r[2]) + '</td><td>' + esc(r[6] || 0) + '</td><td>' + esc(r[3]) + '</td><td>' + esc(r[5] || '') + '</td></tr>'; });
     $('tbl').innerHTML = h + '</table>';
     $('tbl').classList.remove('hide');
     say($('omsg'), d.rows.length + ' customers');
